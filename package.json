@@ -1,0 +1,22 @@
+{
+  "name": "plane-finder",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test:parsers": "tsx src/adapters/paperless141/parser.test.ts"
+  },
+  "dependencies": {
+    "@preact/signals": "^2.3.1",
+    "@preact/preset-vite": "^2.10.2",
+    "preact": "^10.27.2",
+    "vite": "^7.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}
