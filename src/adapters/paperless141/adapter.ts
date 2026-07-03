@@ -32,7 +32,7 @@ export class Paperless141Adapter {
 
   async find(input: SearchInput): Promise<{ candidates: Candidate[]; cfiSchedules: CfiSchedule[] }> {
     const home = await this.openSession(input);
-    if (!/mstrI\.aspx|Announcements|ctl00_BtnSched/.test(home)) {
+    if (!isHomePage(home)) {
       throw new Error("Login did not reach the Paperless141 home page.");
     }
 
@@ -78,7 +78,7 @@ export class Paperless141Adapter {
     if (cached?.username === credentials.username) {
       this.step("session", "Opening portal session", "Reusing authenticated portal session");
       const home = await this.get("/mstrI.aspx");
-      if (/mstrI\.aspx|Announcements|ctl00_BtnSched/.test(home)) {
+      if (isHomePage(home)) {
         this.done("session", "Authenticated session reused");
         this.done("login", "Skipped; already authenticated");
         sessions.set(this.portal.id, { home, username: credentials.username });
@@ -93,6 +93,13 @@ export class Paperless141Adapter {
 
     this.step("login", "Logging in", "Submitting credentials to proxied portal");
     const home = await this.login(input);
+    if (isLoginPage(home)) {
+      throw new Error("Login failed; Paperless returned the login page again. Check the saved username and password.");
+    }
+    if (!isHomePage(home)) {
+      throw new Error("Login did not reach the Paperless141 home page.");
+    }
+    this.done("login", "Authenticated");
     sessions.set(this.portal.id, { home, username: credentials.username });
     return home;
   }
@@ -132,8 +139,9 @@ export class Paperless141Adapter {
     params.set("txtUserName", credentials.username);
     params.set("txtPassword", credentials.password);
     params.set("ButtLogin", "Log In");
+    params.set("ImageButton1.x", "1");
+    params.set("ImageButton1.y", "1");
     const response = await this.post("/", params);
-    this.done("login", "Authenticated");
     return response;
   }
 
@@ -220,6 +228,14 @@ function portalUrl(portal: PortalConfig, path: string): string {
   const base = portal.proxyBasePath.replace(/\/+$/, "");
   const suffix = path.replace(/^\/+/, "");
   return suffix ? `${base}/${suffix}` : `${base}/`;
+}
+
+function isHomePage(html: string): boolean {
+  return /mstrI\.aspx|Announcements|ctl00_BtnSched/.test(html);
+}
+
+function isLoginPage(html: string): boolean {
+  return /txtUserName|txtPassword|ImageButton1|ButtLogin/.test(html);
 }
 
 function rankCandidates(

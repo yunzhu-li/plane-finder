@@ -87,7 +87,8 @@ function App() {
   return (
     <main class="shell">
       <section class="topbar">
-        <div>
+        <div class="brand">
+          <img class="brand-icon" src="icons/plane-finder-page-icon.png" alt="" width="48" height="48" />
           <h1>Plane Finder <span>prototype</span></h1>
           <p class="top-links">
             <a href="https://yunzhu.li/aviation">https://yunzhu.li/aviation</a>

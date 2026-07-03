@@ -56,6 +56,28 @@ h2 {
   font-size: 18px;
 }
 
+.brand {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 12px;
+}
+
+.brand h1 {
+  margin-bottom: 0;
+}
+
+.brand .top-links {
+  grid-column: 2;
+}
+
+.brand-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(23, 23, 23, 0.14);
+}
+
 .top-links {
   display: flex;
   flex-wrap: wrap;
@@ -410,6 +432,16 @@ details p {
     line-height: 1.05;
   }
 
+  .brand {
+    column-gap: 10px;
+  }
+
+  .brand-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+  }
+
   .badge {
     justify-self: start;
     white-space: normal;
@@ -432,12 +464,31 @@ details p {
   input[type="date"],
   input[type="time"] {
     display: block;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    height: 44px;
+    line-height: normal;
     text-align: left;
+    -webkit-appearance: none;
+    appearance: none;
+    overflow: hidden;
   }
 
   input[type="date"]::-webkit-date-and-time-value,
   input[type="time"]::-webkit-date-and-time-value {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
     text-align: left;
+  }
+
+  input[type="date"]::-webkit-inner-spin-button,
+  input[type="time"]::-webkit-inner-spin-button,
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator {
+    margin: 0;
   }
 
   .cards {
