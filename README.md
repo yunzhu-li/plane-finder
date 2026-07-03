@@ -61,12 +61,16 @@ The nginx container only serves files and forwards requests to known upstreams.
 It is intentionally path based and hard-coded so it does not become a
 user-configurable open proxy.
 
+The static frontend is built with relative asset and portal URLs, so it can be
+mounted either at `/` or under a reverse-proxied subpath such as
+`/aviation/plane-finder/`.
+
 ## Proxy Routes
 
-- App: `/`
-- Nice Air: `/portal/niceair/`
-- Squadron 2: `/portal/squadron2/`
-- Advantage Aviation: `/portal/advantage/`
+- App: `/`, or a mounted subpath such as `/aviation/plane-finder/`
+- Nice Air: `portal/niceair/`
+- Squadron 2: `portal/squadron2/`
+- Advantage Aviation: `portal/advantage/`
 
 Each route sets the upstream host header, rewrites redirects back to the local
 path, and scopes upstream cookies to the matching proxy path.

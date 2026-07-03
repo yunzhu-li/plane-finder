@@ -185,14 +185,14 @@ export class Paperless141Adapter {
   }
 
   private async get(path: string): Promise<string> {
-    const response = await fetch(`${this.portal.proxyBasePath}${path}`, {
+    const response = await fetch(portalUrl(this.portal, path), {
       credentials: "include",
     });
     return this.read(response);
   }
 
   private async post(path: string, body: URLSearchParams): Promise<string> {
-    const response = await fetch(`${this.portal.proxyBasePath}${path}`, {
+    const response = await fetch(portalUrl(this.portal, path), {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -214,6 +214,12 @@ export class Paperless141Adapter {
   private done(id: string, detail?: string): void {
     this.emit({ id, level: "done", label: "", detail });
   }
+}
+
+function portalUrl(portal: PortalConfig, path: string): string {
+  const base = portal.proxyBasePath.replace(/\/+$/, "");
+  const suffix = path.replace(/^\/+/, "");
+  return suffix ? `${base}/${suffix}` : `${base}/`;
 }
 
 function rankCandidates(
