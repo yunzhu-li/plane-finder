@@ -16,6 +16,7 @@ button,
 input,
 select {
   font: inherit;
+  min-width: 0;
 }
 
 .shell {
@@ -42,6 +43,13 @@ p {
 h1 {
   margin-bottom: 4px;
   font-size: 34px;
+}
+
+h1 span {
+  font-size: 13px;
+  font-weight: 500;
+  color: #737373;
+  vertical-align: middle;
 }
 
 h2 {
@@ -82,6 +90,7 @@ h2 {
 }
 
 .panel {
+  min-width: 0;
   background: #fff;
   border: 1px solid #d4d4d4;
   border-radius: 8px;
@@ -97,6 +106,7 @@ h2 {
 .grid {
   display: grid;
   gap: 12px;
+  min-width: 0;
 }
 
 .two {
@@ -112,11 +122,13 @@ label {
   gap: 6px;
   font-weight: 650;
   color: #2f2f2f;
+  min-width: 0;
 }
 
 input,
 select {
   width: 100%;
+  max-width: 100%;
   border: 1px solid #b8b8b8;
   border-radius: 6px;
   padding: 10px 11px;
@@ -124,6 +136,8 @@ select {
 }
 
 fieldset {
+  min-width: 0;
+  min-inline-size: 0;
   margin: 0;
   border: 1px solid #d4d4d4;
   border-radius: 8px;
@@ -158,6 +172,7 @@ legend {
 }
 
 button {
+  width: 100%;
   border: 0;
   border-radius: 6px;
   padding: 11px 14px;
@@ -374,6 +389,11 @@ details p {
 }
 
 @media (max-width: 800px) {
+  .shell {
+    width: 100%;
+    padding: 18px 14px 32px;
+  }
+
   .workspace,
   .two,
   .three {
@@ -382,5 +402,45 @@ details p {
 
   .topbar {
     display: grid;
+    gap: 10px;
+  }
+
+  h1 {
+    font-size: 32px;
+    line-height: 1.05;
+  }
+
+  .badge {
+    justify-self: start;
+    white-space: normal;
+  }
+
+  .panel {
+    padding: 14px;
+  }
+
+  .portal-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+  }
+
+  .portal-option {
+    min-width: 0;
+  }
+
+  input[type="date"],
+  input[type="time"] {
+    display: block;
+    text-align: left;
+  }
+
+  input[type="date"]::-webkit-date-and-time-value,
+  input[type="time"]::-webkit-date-and-time-value {
+    text-align: left;
+  }
+
+  .cards {
+    grid-template-columns: 1fr;
   }
 }

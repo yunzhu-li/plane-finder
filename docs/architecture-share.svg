@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img" aria-labelledby="title desc">
+  <title id="title">Plane Finder Architecture</title>
+  <desc id="desc">Browser-owned scheduling logic served through a generic static server and fixed path proxy to supported Paperless141 portals.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f7f7f5; }
+      text { font-family: Arial, Helvetica, sans-serif; }
+      .title { font-size: 46px; font-weight: 700; fill: #171717; }
+      .subtitle { font-size: 22px; font-weight: 400; fill: #525252; }
+      .lane-title { font-size: 22px; font-weight: 700; fill: #262626; }
+      .card-title { font-size: 24px; font-weight: 700; fill: #171717; }
+      .card-sub { font-size: 18px; font-weight: 400; fill: #525252; }
+      .pill-text { font-size: 18px; font-weight: 700; fill: #404040; }
+      .small { font-size: 16px; font-weight: 400; fill: #525252; }
+      .note { font-size: 18px; font-weight: 600; fill: #166534; }
+      .card { fill: #ffffff; stroke: #d4d4d4; stroke-width: 2; }
+      .browser { fill: #f3f4f6; stroke: #737373; stroke-width: 2; }
+      .infra { fill: #eef2ff; stroke: #4f46e5; stroke-width: 2; }
+      .portal { fill: #fff7ed; stroke: #c2410c; stroke-width: 2; }
+      .delivery { fill: #ecfdf5; stroke: #15803d; stroke-width: 2; }
+      .arrow { stroke: #525252; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .soft-arrow { stroke: #737373; stroke-width: 2.5; fill: none; stroke-dasharray: 8 8; marker-end: url(#arrow-soft); }
+      .divider { stroke: #e5e5e5; stroke-width: 2; }
+    </style>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#171717" flood-opacity="0.10"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#525252"/>
+    </marker>
+    <marker id="arrow-soft" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#737373"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="1600" height="1000"/>
+
+  <text class="title" x="80" y="88">Plane Finder Architecture</text>
+  <text class="subtitle" x="80" y="126">Read-only aircraft schedule search with browser-owned logic and a fixed nginx portal proxy</text>
+
+  <rect class="card" x="80" y="180" width="260" height="170" rx="18" filter="url(#shadow)"/>
+  <text class="card-title" x="112" y="240">Member</text>
+  <text class="card-sub" x="112" y="278">Uses browser only</text>
+  <text class="card-sub" x="112" y="308">No extension required</text>
+
+  <rect class="browser" x="410" y="160" width="450" height="500" rx="24" filter="url(#shadow)"/>
+  <text class="lane-title" x="452" y="210">Browser App</text>
+  <text class="small" x="452" y="238">All application logic runs locally</text>
+
+  <rect class="card" x="452" y="270" width="340" height="76" rx="14"/>
+  <text class="card-title" x="480" y="302">Preact UI</text>
+  <text class="card-sub" x="480" y="330">Search form, progress, results</text>
+
+  <rect class="card" x="452" y="370" width="340" height="76" rx="14"/>
+  <text class="card-title" x="480" y="402">Paperless141 Adapter</text>
+  <text class="card-sub" x="480" y="430">Login, navigation, HTML parsing</text>
+
+  <rect class="card" x="452" y="470" width="340" height="76" rx="14"/>
+  <text class="card-title" x="480" y="502">Ranking Engine</text>
+  <text class="card-sub" x="480" y="530">Availability, squawks, 100hr risk</text>
+
+  <rect class="card" x="452" y="570" width="340" height="76" rx="14"/>
+  <text class="card-title" x="480" y="602">Encrypted Local Storage</text>
+  <text class="card-sub" x="480" y="630">Preferences and credentials</text>
+
+  <rect class="infra" x="920" y="180" width="260" height="170" rx="18" filter="url(#shadow)"/>
+  <text class="card-title" x="952" y="234">Server</text>
+  <text class="card-sub" x="952" y="272">Serves static app</text>
+  <text class="card-sub" x="952" y="302">Routes portal requests</text>
+
+  <rect class="infra" x="920" y="440" width="260" height="170" rx="18" filter="url(#shadow)"/>
+  <text class="card-title" x="952" y="494">Fixed Path Proxy</text>
+  <text class="card-sub" x="952" y="532">Read-only forwarding</text>
+  <text class="card-sub" x="952" y="562">Known portals only</text>
+
+  <rect class="portal" x="1280" y="160" width="240" height="90" rx="16" filter="url(#shadow)"/>
+  <text class="card-title" x="1312" y="198">Nice Air</text>
+  <text class="card-sub" x="1312" y="226">Paperless141</text>
+
+  <rect class="portal" x="1280" y="290" width="240" height="90" rx="16" filter="url(#shadow)"/>
+  <text class="card-title" x="1312" y="328">Squadron 2</text>
+  <text class="card-sub" x="1312" y="356">Paperless141</text>
+
+  <rect class="portal" x="1280" y="420" width="240" height="90" rx="16" filter="url(#shadow)"/>
+  <text class="card-title" x="1312" y="458">Advantage</text>
+  <text class="card-sub" x="1312" y="486">Paperless141</text>
+
+  <path class="arrow" d="M 340 265 C 365 265, 380 265, 408 265"/>
+  <path class="arrow" d="M 860 400 C 890 400, 890 265, 918 265"/>
+  <path class="arrow" d="M 1050 350 L 1050 438"/>
+  <path class="arrow" d="M 1180 525 C 1230 525, 1230 205, 1278 205"/>
+  <path class="arrow" d="M 1180 525 C 1235 525, 1235 335, 1278 335"/>
+  <path class="arrow" d="M 1180 525 C 1230 525, 1230 465, 1278 465"/>
+
+  <rect class="card" x="906" y="366" width="288" height="46" rx="23"/>
+  <text class="pill-text" x="940" y="396">relative portal/* requests</text>
+
+  <line class="divider" x1="80" y1="705" x2="1520" y2="705"/>
+
+  <text class="lane-title" x="80" y="760">Delivery Pipeline</text>
+  <text class="small" x="80" y="790">Main branch builds and publishes the app image.</text>
+
+  <rect class="delivery" x="470" y="735" width="220" height="92" rx="16" filter="url(#shadow)"/>
+  <text class="card-title" x="502" y="774">GitHub Repo</text>
+  <text class="card-sub" x="502" y="802">plane-finder</text>
+
+  <rect class="delivery" x="770" y="735" width="240" height="92" rx="16" filter="url(#shadow)"/>
+  <text class="card-title" x="802" y="774">CI Workflow</text>
+  <text class="card-sub" x="802" y="802">Build and publish</text>
+
+  <rect class="delivery" x="1090" y="735" width="300" height="92" rx="16" filter="url(#shadow)"/>
+  <text class="card-title" x="1122" y="774">Container Registry</text>
+  <text class="card-sub" x="1122" y="802">Published app image</text>
+
+  <path class="arrow" d="M 690 781 L 768 781"/>
+  <path class="arrow" d="M 1010 781 L 1088 781"/>
+  <text class="note" x="80" y="925">Key point: no app backend. The browser owns search, parsing, ranking, and encrypted local preferences.</text>
+</svg>

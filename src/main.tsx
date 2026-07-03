@@ -88,13 +88,12 @@ function App() {
     <main class="shell">
       <section class="topbar">
         <div>
-          <h1>Plane Finder</h1>
+          <h1>Plane Finder <span>prototype</span></h1>
           <p class="top-links">
             <a href="https://yunzhu.li/aviation">https://yunzhu.li/aviation</a>
             <a href="https://github.com/yunzhu-li/plane-finder/issues">Feedback</a>
           </p>
         </div>
-        <span class="badge">Read-only prototype</span>
       </section>
 
       <section class="workspace">
@@ -226,7 +225,7 @@ function StatusPanel({ steps }: { steps: StatusStep[] }) {
   const grouped = groupStatusSteps(steps);
   return (
     <aside class="panel">
-      <h2>Progress</h2>
+      <h2>Status</h2>
       {steps.length === 0 && <ul class="steps">
         {steps.length === 0 && <li class="muted">Ready to query the portal.</li>}
       </ul>}

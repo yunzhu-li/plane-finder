@@ -32,6 +32,9 @@ The current prototype supports Paperless141-style portals:
 Plane Finder has no application backend. It is a static browser application plus
 a fixed nginx reverse proxy.
 
+See [docs/architecture.md](docs/architecture.md) for a presentation-friendly
+architecture diagram.
+
 ```text
 Browser
   Preact UI
