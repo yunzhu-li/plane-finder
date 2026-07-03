@@ -48,7 +48,7 @@ function App() {
     try {
       await saveSearchPreferences(input);
       const portalResults = await Promise.all(selectedPortals.map(async (portal) => {
-        const adapter = new Paperless141Adapter(portal, (step) => {
+        const emitPortalStatus = (step: Omit<StatusStep, "id"> & { id?: string }) => {
           const id = step.id || step.label.toLowerCase().replace(/\W+/g, "-");
           updateStatus({
             ...step,
@@ -57,12 +57,25 @@ function App() {
             portalLabel: portal.label,
             label: step.label || labelFor(id),
           });
+        };
+        const adapter = new Paperless141Adapter(portal, (step) => {
+          emitPortalStatus(step);
         });
-        const result = await adapter.find(input);
-        return result.candidates;
+        try {
+          const result = await adapter.find(input);
+          return { portal, candidates: result.candidates, error: null };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          emitPortalStatus({ id: "error", level: "error", label: "Search failed", detail: message });
+          return { portal, candidates: [] as Candidate[], error: message };
+        }
       }));
-      const results = portalResults.flat();
+      const results = portalResults.flatMap((result) => result.candidates);
       setCandidates(results.sort((a, b) => Number(b.viable) - Number(a.viable) || b.score - a.score));
+      const failures = portalResults.filter((result) => result.error);
+      if (failures.length === portalResults.length && failures.length > 0) {
+        setError(failures.map((result) => `${result.portal.label}: ${result.error}`).join("; "));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       updateStatus({ id: "error", level: "error", label: "Search failed", detail: err instanceof Error ? err.message : String(err) });

@@ -8,7 +8,7 @@ import type {
   Squawk,
   StatusStep,
 } from "../../types";
-import { inferSlotMinutes, minutesFromTime, overlapMinutes, requestedMinutes } from "../../lib/time";
+import { overlapMinutes, requestedMinutes } from "../../lib/time";
 import {
   extractAircraftOptions,
   parseCfiPage,
@@ -251,7 +251,7 @@ function rankCandidates(
       }, Math.max(0, fleetSquawkCount - aircraftSquawks.length) * 5);
       const availabilityScore = requested > 0 ? (availableMinutes / requested) * 100 : 0;
       const cfiScore = input.requireCfi ? (cfiAvailableMinutes ?? 0) / requested * 25 : 25;
-      const estimatedHoursToHundredHour = estimateHoursToHundredAtStart(item, status, input.desiredDate, input.startTime);
+      const estimatedHoursToHundredHour = estimateHoursToHundredAtStart(status, input.desiredDate);
       const annualOverdue = Boolean(status?.annualDue && isOverdueAt(status.annualDue, input.desiredDate));
       const hundredHourOverdue = Boolean(status?.hoursToHundredHour != null && status.hoursToHundredHour <= 0);
       const groundingAlert = aircraftSquawks.some((squawk) => /grounding alert/i.test(squawk.description));
@@ -364,22 +364,10 @@ function estimateInspectionRisk(
   return "unknown";
 }
 
-function estimateHoursToHundredAtStart(
-  aircraft: AircraftSchedule,
-  status: FleetStatus | null,
-  desiredDate: string,
-  startTime: string,
-): number | null {
+function estimateHoursToHundredAtStart(status: FleetStatus | null, desiredDate: string): number | null {
   if (status?.hoursToHundredHour == null) return null;
-  const start = minutesFromTime(startTime);
-  const slot = inferSlotMinutes(aircraft.cells.map((cell) => cell.time));
   const daysUntilRequestedDate = daysBetweenLocalDates(todayLocalDate(), desiredDate);
-  const scheduledBeforeStart = aircraft.cells.reduce((total, cell) => {
-    const time = minutesFromTime(cell.time);
-    if (time >= start || cell.available) return total;
-    return total + slot;
-  }, 0);
-  return status.hoursToHundredHour - daysUntilRequestedDate * 4 - scheduledBeforeStart / 60;
+  return status.hoursToHundredHour - daysUntilRequestedDate * 4;
 }
 
 function todayLocalDate(): string {
