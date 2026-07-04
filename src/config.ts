@@ -19,4 +19,10 @@ export const portals: PortalConfig[] = [
     type: "paperless141",
     proxyBasePath: "portal/advantage",
   },
+  {
+    id: "aerodynamic",
+    label: "Aerodynamic",
+    type: "paperless141",
+    proxyBasePath: "portal/aerodynamic",
+  },
 ];

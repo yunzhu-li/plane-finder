@@ -10,6 +10,7 @@ The current prototype supports Paperless141-style portals:
 - Nice Air
 - Squadron 2
 - Advantage Aviation
+- Aerodynamic Aviation
 
 ## What It Does
 
@@ -74,6 +75,7 @@ mounted either at `/` or under a reverse-proxied subpath such as
 - Nice Air: `portal/niceair/`
 - Squadron 2: `portal/squadron2/`
 - Advantage Aviation: `portal/advantage/`
+- Aerodynamic Aviation: `portal/aerodynamic/`
 
 Each route sets the upstream host header, rewrites redirects back to the local
 path, and scopes upstream cookies to the matching proxy path.

@@ -19,6 +19,7 @@ flowchart LR
     nice["Nice Air<br/><span>Paperless141</span>"]
     squadron["Squadron 2<br/><span>Paperless141</span>"]
     advantage["Advantage Aviation<br/><span>Paperless141</span>"]
+    aerodynamic["Aerodynamic Aviation<br/><span>Paperless141</span>"]
   end
 
   subgraph delivery["Delivery"]
@@ -36,6 +37,7 @@ flowchart LR
   app -->|"read-only proxied requests"| nice
   app -->|"read-only proxied requests"| squadron
   app -->|"read-only proxied requests"| advantage
+  app -->|"read-only proxied requests"| aerodynamic
 
   repo --> actions --> registry
   registry -. "app image" .-> app
