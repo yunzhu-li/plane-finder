@@ -42,7 +42,7 @@ export class Paperless141Adapter {
 
     this.step("schedule", "Loading aircraft schedule", "Navigating to resource schedules");
     let scheduleHtml = await this.navigateFromHome(home, "ctl00$BtnSched", "Schedules");
-    scheduleHtml = await this.setScheduleDate(scheduleHtml, input.desiredDate, "mstr7p.aspx");
+    scheduleHtml = await this.setScheduleDateAndViewStart(scheduleHtml, input.desiredDate, "mstr7p.aspx");
     const aircraft = filterAircraftByModel(parseSchedulePage(scheduleHtml), input.aircraftModel);
     this.done("schedule", `${aircraft.length} aircraft columns parsed`);
 
@@ -169,18 +169,34 @@ export class Paperless141Adapter {
     return this.post(formPostPath(doc, "mstrI.aspx"), params);
   }
 
-  private async setScheduleDate(html: string, desiredDate: string, path: string): Promise<string> {
+  private async setScheduleDateAndViewStart(html: string, desiredDate: string, path: string): Promise<string> {
     const doc = parseHtml(html);
-    const input = doc.querySelector<HTMLInputElement>("#ctl00_ContentPlaceHolder1_DropDate1");
-    if (!input) return html;
-
-    const desiredValue = input.type === "date" ? desiredDate : formatPaperlessDate(desiredDate);
-    if (input.value === desiredValue) return html;
-
+    const dateInput = doc.querySelector<HTMLInputElement>("#ctl00_ContentPlaceHolder1_DropDate1");
     const params = collectFormFields(doc);
-    params.set("__EVENTTARGET", "ctl00$ContentPlaceHolder1$DropDate1");
+    const dateEventTarget = "ctl00$ContentPlaceHolder1$DropDate1";
+    let eventTarget = "";
+    let changed = false;
+
+    if (dateInput) {
+      const desiredValue = dateInput.type === "date" ? desiredDate : formatPaperlessDate(desiredDate);
+      if (dateInput.value !== desiredValue) {
+        params.set(dateEventTarget, desiredValue);
+        eventTarget = dateEventTarget;
+        changed = true;
+      }
+    }
+
+    const viewStart = scheduleViewStartUpdate(doc);
+    if (viewStart) {
+      params.set(viewStart.name, viewStart.value);
+      eventTarget ||= viewStart.name;
+      changed = true;
+    }
+
+    if (!changed) return html;
+
+    params.set("__EVENTTARGET", eventTarget);
     params.set("__EVENTARGUMENT", "");
-    params.set("ctl00$ContentPlaceHolder1$DropDate1", desiredValue);
     return this.post(formPostPath(doc, path), params);
   }
 
@@ -210,26 +226,30 @@ export class Paperless141Adapter {
   }
 
   private async get(path: string): Promise<string> {
-    const response = await fetch(portalUrl(this.portal, path), {
-      credentials: "include",
-    });
-    return this.read(response);
+    return this.request("GET", path);
   }
 
   private async post(path: string, body: URLSearchParams): Promise<string> {
-    const response = await fetch(portalUrl(this.portal, path), {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body,
-      redirect: "follow",
-    });
-    return this.read(response);
+    return this.request("POST", path, body);
   }
 
-  private async read(response: Response): Promise<string> {
-    if (!response.ok) throw new Error(`Portal returned ${response.status}`);
-    return response.text();
+  private async request(method: "GET" | "POST", path: string, body?: URLSearchParams): Promise<string> {
+    const url = portalUrl(this.portal, path);
+    try {
+      const response = await fetch(url, {
+        method,
+        credentials: "include",
+        headers: body ? { "Content-Type": "application/x-www-form-urlencoded" } : undefined,
+        body,
+        redirect: "follow",
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} ${response.statusText || "error"}`);
+      }
+      return response.text();
+    } catch (err) {
+      throw new Error(portalRequestError(this.portal, method, url, err));
+    }
   }
 
   private step(id: string, label: string, detail?: string): void {
@@ -251,6 +271,15 @@ function portalUrl(portal: PortalConfig, path: string): string {
   return suffix ? `${base}/${suffix}` : `${base}/`;
 }
 
+function portalRequestError(portal: PortalConfig, method: string, url: string, err: unknown): string {
+  const reason = err instanceof Error ? err.message : String(err);
+  const details = [`${portal.label}: ${method} ${url} failed`, `Reason: ${reason}`];
+  if (/load failed|failed to fetch|networkerror/i.test(reason)) {
+    details.push("This usually means the browser could not reach the local proxy, the proxy could not reach Paperless141, or the phone is not on a network that can access this host.");
+  }
+  return details.join(". ");
+}
+
 function isHomePage(html: string): boolean {
   return /mstrI\.aspx|Announcements|ctl00_BtnSched/.test(html);
 }
@@ -261,8 +290,11 @@ function isLoginPage(html: string): boolean {
 
 function loginFailureMessage(html: string): string {
   const text = pageText(html);
+  if (/failed to load/i.test(text)) {
+    return "Login failed. Check the portal User ID and password, then try again.";
+  }
   const match = text.match(/(?:invalid|incorrect|failed|try again|not found)[^.?!]*(?:[.?!]|$)/i);
-  return match ? `Login failed: ${match[0].trim()}` : "Login failed. Check User ID and password.";
+  return match ? `Login failed: ${match[0].trim()}` : "Login failed. Check the portal User ID and password, then try again.";
 }
 
 function pageText(html: string): string {
@@ -534,6 +566,34 @@ function collectFormFields(doc: Document): URLSearchParams {
     params.set(field.name, field.value);
   });
   return params;
+}
+
+function scheduleViewStartUpdate(doc: Document): { name: string; value: string } | null {
+  const select = [...doc.querySelectorAll<HTMLSelectElement>("select")].find(isScheduleViewStartSelect);
+  if (!select?.name) return null;
+
+  const zeroHour = [...select.options].find((option) => normalizedHour(option.value) === 0)
+    || [...select.options].find((option) => normalizedHour(option.textContent || "") === 0);
+  if (!zeroHour) return null;
+
+  const selectedHour = normalizedHour(select.value)
+    ?? normalizedHour(select.selectedOptions[0]?.textContent || "");
+  if (selectedHour === 0) return null;
+
+  return { name: select.name, value: zeroHour.value };
+}
+
+function isScheduleViewStartSelect(select: HTMLSelectElement): boolean {
+  const options = [...select.options].map((option) => normalizedHour(option.value) ?? normalizedHour(option.textContent || ""));
+  const hourOptions = options.filter((value) => value != null);
+  return hourOptions.length >= 12 && hourOptions.includes(0) && hourOptions.includes(23);
+}
+
+function normalizedHour(value: string): number | null {
+  const trimmed = value.trim();
+  if (!/^\d{1,2}$/.test(trimmed)) return null;
+  const hour = Number(trimmed);
+  return hour >= 0 && hour <= 23 ? hour : null;
 }
 
 function formPostPath(doc: Document, fallback: string): string {

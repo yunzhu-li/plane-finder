@@ -4,12 +4,14 @@ import { signal } from "@preact/signals";
 import { portals } from "./config";
 import { Paperless141Adapter } from "./adapters/paperless141/adapter";
 import { loadSearchPreferences, saveSearchPreferences } from "./lib/preferencesStorage";
+import { minutesFromTime } from "./lib/time";
 import type { Candidate, SearchInput, StatusStep } from "./types";
 import "./styles.css";
 
 const statusSteps = signal<StatusStep[]>([]);
 
 const today = new Date().toISOString().slice(0, 10);
+const timeStepSeconds = 30 * 60;
 
 function App() {
   const [input, setInput] = useState<SearchInput>({
@@ -29,6 +31,7 @@ function App() {
     () => portals.filter((portal) => input.portalIds.includes(portal.id)),
     [input.portalIds],
   );
+  const timeRangeError = getTimeRangeError(input);
 
   useEffect(() => {
     void loadSearchPreferences()
@@ -41,6 +44,9 @@ function App() {
   }, []);
 
   async function runSearch() {
+    if (timeRangeError) {
+      return;
+    }
     setRunning(true);
     setError("");
     setCandidates([]);
@@ -66,7 +72,9 @@ function App() {
           return { portal, candidates: result.candidates, error: null };
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          emitPortalStatus({ id: "error", level: "error", label: "Search failed", detail: message });
+          if (!hasPortalError(portal.id)) {
+            emitPortalStatus({ id: "error", level: "error", label: "Search failed", detail: message });
+          }
           return { portal, candidates: [] as Candidate[], error: message };
         }
       }));
@@ -153,13 +161,28 @@ function App() {
             </label>
             <label>
               From
-              <input type="time" value={input.startTime} onInput={(event) => setInput({ ...input, startTime: event.currentTarget.value })} />
+              <input
+                type="time"
+                value={input.startTime}
+                step={timeStepSeconds}
+                max={input.endTime || undefined}
+                aria-invalid={Boolean(timeRangeError)}
+                onInput={(event) => setInput({ ...input, startTime: event.currentTarget.value })}
+              />
             </label>
             <label>
               To
-              <input type="time" value={input.endTime} onInput={(event) => setInput({ ...input, endTime: event.currentTarget.value })} />
+              <input
+                type="time"
+                value={input.endTime}
+                step={timeStepSeconds}
+                min={input.startTime || undefined}
+                aria-invalid={Boolean(timeRangeError)}
+                onInput={(event) => setInput({ ...input, endTime: event.currentTarget.value })}
+              />
             </label>
           </div>
+          {timeRangeError && <p class="error">{timeRangeError}</p>}
 
           <label class="toggle">
             <input type="checkbox" checked={input.requireCfi} onInput={(event) => setInput({ ...input, requireCfi: event.currentTarget.checked })} />
@@ -215,11 +238,30 @@ function updateCredentials(input: SearchInput, portalId: string, next: Partial<{
   };
 }
 
+function hasPortalError(portalId: string): boolean {
+  return statusSteps.value.some((step) => step.portalId === portalId && step.level === "error");
+}
+
 function canSearch(input: SearchInput): boolean {
-  return input.portalIds.length > 0 && input.portalIds.every((portalId) => {
+  return !getTimeRangeError(input) && input.portalIds.length > 0 && input.portalIds.every((portalId) => {
     const credentials = credentialsFor(input, portalId);
     return Boolean(credentials.username && credentials.password);
   });
+}
+
+function getTimeRangeError(input: SearchInput): string {
+  if (!input.startTime || !input.endTime) return "Start and end times are required.";
+  if (!isThirtyMinuteIncrement(input.startTime) || !isThirtyMinuteIncrement(input.endTime)) {
+    return "Start and end times must be in 30-minute increments.";
+  }
+  if (minutesFromTime(input.endTime) <= minutesFromTime(input.startTime)) {
+    return "End time must be after start time.";
+  }
+  return "";
+}
+
+function isThirtyMinuteIncrement(value: string): boolean {
+  return minutesFromTime(value) % 30 === 0;
 }
 
 function StatusPanel({ steps }: { steps: StatusStep[] }) {
