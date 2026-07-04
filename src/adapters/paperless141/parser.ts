@@ -9,9 +9,10 @@ export function parseHiddenFields(doc: Document): URLSearchParams {
 }
 
 export function parseSchedulePage(html: string): AircraftSchedule[] {
+  if (typeof DOMParser === "undefined") return parseSchedulePageFallback(html);
   const doc = new DOMParser().parseFromString(html, "text/html");
   const table = findScheduleTable(doc);
-  if (!table) return [];
+  if (!table) return parseSchedulePageFallback(html);
 
   const rows = [...table.querySelectorAll("tr")];
   const firstTimeRow = firstTimeRowIndex(rows);
@@ -24,17 +25,19 @@ export function parseSchedulePage(html: string): AircraftSchedule[] {
   const count = aircraftEnd >= 0 ? aircraftEnd : headers.length;
   const dataStart = firstTimeRow >= 0 ? firstTimeRow : headerRowIndex + 1;
 
-  return headers.slice(0, count).map((reg, colIndex) => ({
+  const aircraft = headers.slice(0, count).map((reg, colIndex) => ({
     reg,
     type: typeCells[colIndex] || "Unknown",
     cells: rows.slice(dataStart).map((row) => parseScheduleCell(row, colIndex + 1)).filter(Boolean) as ScheduleCell[],
-  })).filter((aircraft) => aircraft.reg);
+  })).filter((item) => item.reg);
+  return aircraft.length > 0 ? aircraft : parseSchedulePageFallback(html);
 }
 
 export function parseCfiPage(html: string): CfiSchedule[] {
+  if (typeof DOMParser === "undefined") return parseCfiPageFallback(html);
   const doc = new DOMParser().parseFromString(html, "text/html");
   const table = findScheduleTable(doc);
-  if (!table) return [];
+  if (!table) return parseCfiPageFallback(html);
 
   const rows = [...table.querySelectorAll("tr")];
   const firstTimeRow = firstTimeRowIndex(rows);
@@ -47,10 +50,11 @@ export function parseCfiPage(html: string): CfiSchedule[] {
   if (typeCells.length > 0 && cfiStartRaw < 0) return [];
   const cfiStart = Math.max(0, cfiStartRaw);
 
-  return headers.slice(cfiStart).map((name, index) => ({
+  const cfis = headers.slice(cfiStart).map((name, index) => ({
     name,
     cells: rows.slice(dataStart).map((row) => parseScheduleCell(row, cfiStart + index + 1)).filter(Boolean) as ScheduleCell[],
   })).filter((cfi) => cfi.name);
+  return cfis.length > 0 ? cfis : parseCfiPageFallback(html);
 }
 
 export function parseSquawksPage(html: string): Squawk[] {
@@ -129,6 +133,111 @@ function parseScheduleCell(row: HTMLTableRowElement, colIndex: number): Schedule
     rawText,
     background,
   };
+}
+
+function parseSchedulePageFallback(html: string): AircraftSchedule[] {
+  const parsed = parseRawScheduleGrid(html);
+  if (!parsed) return [];
+  return parsed.headers.slice(0, parsed.aircraftCount).map((reg, colIndex) => ({
+    reg,
+    type: parsed.typeCells[colIndex] || "Unknown",
+    cells: parsed.rows.map((row) => rawScheduleCell(row, colIndex + 1)).filter(Boolean) as ScheduleCell[],
+  })).filter((aircraft) => aircraft.reg);
+}
+
+function parseCfiPageFallback(html: string): CfiSchedule[] {
+  const parsed = parseRawScheduleGrid(html);
+  if (!parsed) return [];
+  const cfiStart = parsed.aircraftCount;
+  return parsed.headers.slice(cfiStart).map((name, index) => ({
+    name,
+    cells: parsed.rows.map((row) => rawScheduleCell(row, cfiStart + index + 1)).filter(Boolean) as ScheduleCell[],
+  })).filter((cfi) => cfi.name);
+}
+
+function parseRawScheduleGrid(html: string): { headers: string[]; typeCells: string[]; aircraftCount: number; rows: string[][] } | null {
+  const tableHtml = extractTableHtml(html, "ctl00_ContentPlaceHolder1_GridView2") || extractBestScheduleTableHtml(html);
+  if (!tableHtml) return null;
+
+  const rows = [...tableHtml.matchAll(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi)].map((match) => rawRowCells(match[0])).filter((cells) => cells.length > 0);
+  const firstTimeRow = rows.findIndex((cells) => /^\d{1,2}:\d{2}$/.test(cells[0] || ""));
+  const headerRowIndex = findRawResourceHeaderRow(rows, firstTimeRow);
+  const headerCells = rows[headerRowIndex] || [];
+  const headers = headerCells.slice(1);
+  const typeCells = isTypeLikeLabel(rows[headerRowIndex + 1]?.[0] || "") ? rows[headerRowIndex + 1].slice(1) : [];
+  const aircraftEnd = typeCells.findIndex((type) => /CFI|MEI|FI/i.test(type));
+  const aircraftCount = aircraftEnd >= 0 ? aircraftEnd : headers.length;
+  const dataStart = firstTimeRow >= 0 ? firstTimeRow : headerRowIndex + 1;
+
+  if (headers.length === 0 || aircraftCount === 0) return null;
+  return { headers, typeCells, aircraftCount, rows: rows.slice(dataStart) };
+}
+
+function extractTableHtml(html: string, id: string): string | null {
+  const startMatch = new RegExp(`<table\\b[^>]*(?:id|name)=["']${id}["'][^>]*>`, "i").exec(html);
+  if (!startMatch) return null;
+  const start = startMatch.index;
+  const end = html.indexOf("</table>", start);
+  return end >= 0 ? html.slice(start, end + "</table>".length) : null;
+}
+
+function extractBestScheduleTableHtml(html: string): string | null {
+  const tables = [...html.matchAll(/<table\b[^>]*>[\s\S]*?<\/table>/gi)].map((match) => match[0]);
+  return tables
+    .map((table) => ({
+      table,
+      score: [...table.matchAll(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi)].reduce((total, rowMatch) => {
+        const first = rawRowCells(rowMatch[0])[0] || "";
+        if (/^\d{1,2}:\d{2}$/.test(first)) return total + 2;
+        if (/Reg#|Reg|Aircraft|Tail|CFI|Instructor/i.test(first)) return total + 1;
+        return total;
+      }, 0),
+    }))
+    .sort((a, b) => b.score - a.score)[0]?.table || null;
+}
+
+function findRawResourceHeaderRow(rows: string[][], firstTimeRow: number): number {
+  const searchEnd = firstTimeRow >= 0 ? firstTimeRow : rows.length;
+  const candidates = rows.slice(0, searchEnd)
+    .map((cells, index) => ({ index, cells }))
+    .filter(({ cells }) => cells.length > 2)
+    .filter(({ cells }) => !isTypeLikeLabel(cells[0]) && !isLocationLikeLabel(cells[0]));
+
+  const explicit = candidates.find(({ cells }) => /Reg#|Reg|Aircraft|Tail|CFI|Instructor|Name/i.test(cells[0]));
+  if (explicit) return explicit.index;
+
+  return candidates
+    .sort((a, b) => resourceHeaderScore(b.cells) - resourceHeaderScore(a.cells))[0]?.index || 0;
+}
+
+function rawScheduleCell(row: string[], colIndex: number): ScheduleCell | null {
+  const time = row[0] || "";
+  const rawText = row[colIndex] || "";
+  if (!/^\d{1,2}:\d{2}$/.test(time)) return null;
+  const label = /^select$/i.test(rawText) ? "" : rawText;
+  const unavailableText = /maint|not available|reserved|standby|ground|inspection|training|unavailable/i.test(rawText);
+  return {
+    time,
+    available: !unavailableText && (!rawText || /^select$/i.test(rawText)),
+    label,
+    title: "",
+    rawText,
+    background: "",
+  };
+}
+
+function rawRowCells(rowHtml: string): string[] {
+  return [...rowHtml.matchAll(/<(?:td|th)\b[^>]*>([\s\S]*?)<\/(?:td|th)>/gi)].map((match) => clean(decodeHtml(match[1].replace(/<[^>]*>/g, " "))));
+}
+
+function decodeHtml(value: string): string {
+  return value
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&gt;/gi, ">")
+    .replace(/&lt;/gi, "<")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;/gi, "'");
 }
 
 function findScheduleTable(doc: Document): HTMLTableElement | null {

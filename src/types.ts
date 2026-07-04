@@ -79,6 +79,7 @@ export type Candidate = {
   portalId: string;
   portalLabel: string;
   aircraft: AircraftSchedule;
+  summary?: string;
   score: number;
   viable: boolean;
   reasons: string[];

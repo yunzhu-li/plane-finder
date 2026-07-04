@@ -13,7 +13,7 @@ const today = new Date().toISOString().slice(0, 10);
 
 function App() {
   const [input, setInput] = useState<SearchInput>({
-    portalIds: [portals[0].id],
+    portalIds: [],
     credentials: Object.fromEntries(portals.map((portal) => [portal.id, { username: "", password: "" }])),
     desiredDate: today,
     startTime: "09:00",
@@ -92,7 +92,7 @@ function App() {
           <h1>Plane Finder <span>prototype</span></h1>
           <p class="top-links">
             <a href="https://yunzhu.li/aviation">https://yunzhu.li/aviation</a>
-            <a href="https://github.com/yunzhu-li/plane-finder/issues">Feedback</a>
+            <a href="https://github.com/yunzhu-li/plane-finder/issues">feedback</a>
           </p>
         </div>
       </section>
@@ -285,10 +285,14 @@ function ResultGroup({ title, candidates, empty }: { title: string; candidates: 
           <article class="candidate" key={`${candidate.portalId}-${candidate.aircraft.reg}`}>
             <header>
               <div>
-                <h3>{candidate.aircraft.reg}</h3>
-                <p>{candidate.portalLabel} · {candidate.aircraft.type}</p>
+                <h3>{candidate.summary || candidate.aircraft.reg}</h3>
+                <p>{candidate.summary ? candidate.portalLabel : `${candidate.portalLabel} · ${candidate.aircraft.type}`}</p>
               </div>
             </header>
+            {candidate.summary
+              ? null
+              : (
+                <>
             <div class="facts">
               <Fact
                 label="Availability"
@@ -328,6 +332,8 @@ function ResultGroup({ title, candidates, empty }: { title: string; candidates: 
                 {candidate.notes.map((note) => <span key={note} class={`note ${noteTone(note)}`}>{note}</span>)}
               </div>
             )}
+                </>
+              )}
           </article>
         ))}
       </div>

@@ -51,6 +51,19 @@ export class Paperless141Adapter {
     this.done("instructors", `${cfis.length} instructor columns parsed`);
 
     const requested = requestedMinutes(input.startTime, input.endTime);
+    const selectedCfi = selectCfi(cfis, input.cfiName);
+    const cfiAvailableMinutes = selectedCfi
+      ? overlapMinutes(selectedCfi.cells, input.startTime, input.endTime)
+      : null;
+
+    if (input.requireCfi && (cfiAvailableMinutes ?? 0) < requested) {
+      this.done("rank", "CFI unavailable; skipped aircraft checks");
+      return {
+        candidates: [buildCfiUnavailableCandidate(this.portal, input, requested, cfiAvailableMinutes)],
+        cfiSchedules: cfis,
+      };
+    }
+
     const detailedSquawkTargets = aircraft
       .filter((item) => {
         const status = fleetStatus.find((record) => record.reg === item.reg);
@@ -93,13 +106,6 @@ export class Paperless141Adapter {
 
     this.step("login", "Logging in", "Submitting credentials to proxied portal");
     const home = await this.login(input);
-    if (isLoginPage(home)) {
-      throw new Error("Login failed; Paperless returned the login page again. Check the saved username and password.");
-    }
-    if (!isHomePage(home)) {
-      throw new Error("Login did not reach the Paperless141 home page.");
-    }
-    this.done("login", "Authenticated");
     sessions.set(this.portal.id, { home, username: credentials.username });
     return home;
   }
@@ -139,9 +145,20 @@ export class Paperless141Adapter {
     params.set("txtUserName", credentials.username);
     params.set("txtPassword", credentials.password);
     params.set("ButtLogin", "Log In");
-    params.set("ImageButton1.x", "1");
-    params.set("ImageButton1.y", "1");
     const response = await this.post("/", params);
+
+    if (!isHomePage(response)) {
+      if (isLoginPage(response)) {
+        const message = loginFailureMessage(response);
+        this.failed("login", message);
+        throw new Error(message);
+      }
+      const message = "Login was submitted, but the portal returned an unexpected page.";
+      this.failed("login", message);
+      throw new Error(message);
+    }
+
+    this.done("login", "Authenticated");
     return response;
   }
 
@@ -188,7 +205,7 @@ export class Paperless141Adapter {
       all.push(...parseSquawksPage(html).map((squawk) => ({ ...squawk, aircraft: reg })));
     }
 
-    this.done("squawks", `${all.length} squawk-like rows found`);
+    this.done("squawks", `${all.length} squawks found`);
     return all;
   }
 
@@ -222,6 +239,10 @@ export class Paperless141Adapter {
   private done(id: string, detail?: string): void {
     this.emit({ id, level: "done", label: "", detail });
   }
+
+  private failed(id: string, detail: string): void {
+    this.emit({ id, level: "error", label: "", detail });
+  }
 }
 
 function portalUrl(portal: PortalConfig, path: string): string {
@@ -235,7 +256,24 @@ function isHomePage(html: string): boolean {
 }
 
 function isLoginPage(html: string): boolean {
-  return /txtUserName|txtPassword|ImageButton1|ButtLogin/.test(html);
+  return /txtUserName|txtPassword|ButtLogin|Please Log In/i.test(html);
+}
+
+function loginFailureMessage(html: string): string {
+  const text = pageText(html);
+  const match = text.match(/(?:invalid|incorrect|failed|try again|not found)[^.?!]*(?:[.?!]|$)/i);
+  return match ? `Login failed: ${match[0].trim()}` : "Login failed. Check User ID and password.";
+}
+
+function pageText(html: string): string {
+  if (typeof DOMParser !== "undefined") {
+    return cleanText(new DOMParser().parseFromString(html, "text/html").body.textContent || "");
+  }
+  return cleanText(html.replace(/<script\b[\s\S]*?<\/script>/gi, " ").replace(/<style\b[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " "));
+}
+
+function cleanText(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function rankCandidates(
@@ -248,7 +286,7 @@ function rankCandidates(
   detailedSquawkRegs: Set<string>,
 ): Candidate[] {
   const requested = requestedMinutes(input.startTime, input.endTime);
-  const selectedCfi = cfis.find((cfi) => cfi.name.toLowerCase().includes(input.cfiName.toLowerCase()));
+  const selectedCfi = selectCfi(cfis, input.cfiName);
 
   return aircraft
     .map((item) => {
@@ -303,6 +341,44 @@ function rankCandidates(
       };
     })
     .sort((a, b) => Number(b.viable) - Number(a.viable) || b.score - a.score);
+}
+
+function selectCfi(cfis: CfiSchedule[], cfiName: string): CfiSchedule | undefined {
+  return cfis.find((cfi) => cfi.name.toLowerCase().includes(cfiName.toLowerCase()));
+}
+
+function buildCfiUnavailableCandidate(
+  portal: PortalConfig,
+  input: SearchInput,
+  requested: number,
+  cfiAvailableMinutes: number | null,
+): Candidate {
+  return {
+    portalId: portal.id,
+    portalLabel: portal.label,
+    aircraft: {
+      reg: "(CFI unavailable)",
+      type: input.cfiName.trim() || "Required CFI",
+      cells: [],
+    },
+    summary: "(CFI unavailable)",
+    score: -1,
+    viable: false,
+    reasons: ["CFI unavailable"],
+    requestedMinutes: requested,
+    availableMinutes: 0,
+    cfiAvailableMinutes,
+    squawks: [],
+    squawkDetailsLoaded: false,
+    squawkSkipReason: "Skipped because CFI is unavailable.",
+    groundingAlert: false,
+    inspectionRisk: "unknown",
+    annualOverdue: false,
+    hundredHourOverdue: false,
+    estimatedHoursToHundredHour: null,
+    fleetStatus: null,
+    notes: ["CFI unavailable"],
+  };
 }
 
 function filterAircraftByModel(aircraft: AircraftSchedule[], modelFilter: string): AircraftSchedule[] {

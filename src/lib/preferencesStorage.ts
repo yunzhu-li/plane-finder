@@ -25,7 +25,11 @@ export async function saveSearchPreferences(input: SearchInput): Promise<void> {
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
   localStorage.removeItem(OLD_SECURE_STORAGE_KEY);
-  await saveEncryptedCredentials(input.credentials);
+  try {
+    await saveEncryptedCredentials(input.credentials, input.portalIds);
+  } catch {
+    // Credential persistence is best-effort; searches should still run without it.
+  }
 }
 
 export async function loadSearchPreferences(): Promise<(SearchPreferences & { credentials?: Record<string, PortalCredentials> }) | null> {
@@ -42,10 +46,20 @@ export async function loadSearchPreferences(): Promise<(SearchPreferences & { cr
   };
 }
 
-async function saveEncryptedCredentials(credentials: Record<string, PortalCredentials>): Promise<void> {
+async function saveEncryptedCredentials(credentials: Record<string, PortalCredentials>, portalIds: string[]): Promise<void> {
+  if (!canUseCredentialCrypto()) return;
+
   const key = await getCredentialKey();
+  const saved = await loadEncryptedCredentialsWithKey(key) || {};
+
+  portalIds.forEach((portalId) => {
+    const credential = credentials[portalId];
+    if (!credential?.username || !credential.password) return;
+    saved[portalId] = credential;
+  });
+
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encoded = new TextEncoder().encode(JSON.stringify(credentials));
+  const encoded = new TextEncoder().encode(JSON.stringify(saved));
   const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
   localStorage.setItem(CREDENTIALS_STORAGE_KEY, JSON.stringify({
     iv: bytesToBase64(iv),
@@ -54,23 +68,37 @@ async function saveEncryptedCredentials(credentials: Record<string, PortalCreden
 }
 
 async function loadEncryptedCredentials(): Promise<Record<string, PortalCredentials> | undefined> {
+  if (!canUseCredentialCrypto()) return undefined;
+
+  try {
+    const key = await getCredentialKey();
+    return await loadEncryptedCredentialsWithKey(key);
+  } catch {
+    return undefined;
+  }
+}
+
+async function loadEncryptedCredentialsWithKey(key: CryptoKey): Promise<Record<string, PortalCredentials> | undefined> {
   const raw = localStorage.getItem(CREDENTIALS_STORAGE_KEY);
   if (!raw) return undefined;
   try {
-    const payload = JSON.parse(raw) as { iv: string; ciphertext: string };
-    const key = await getCredentialKey();
-    const iv = base64ToBytes(payload.iv);
-    const ciphertext = base64ToBytes(payload.ciphertext);
-    const plaintext = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: toArrayBuffer(iv) },
-      key,
-      toArrayBuffer(ciphertext),
-    );
-    return JSON.parse(new TextDecoder().decode(plaintext)) as Record<string, PortalCredentials>;
+    return await decryptStoredValue<Record<string, PortalCredentials>>(raw, key);
   } catch {
     localStorage.removeItem(CREDENTIALS_STORAGE_KEY);
     return undefined;
   }
+}
+
+async function decryptStoredValue<T>(raw: string, key: CryptoKey): Promise<T> {
+  const payload = JSON.parse(raw) as { iv: string; ciphertext: string };
+  const iv = base64ToBytes(payload.iv);
+  const ciphertext = base64ToBytes(payload.ciphertext);
+  const plaintext = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: toArrayBuffer(iv) },
+    key,
+    toArrayBuffer(ciphertext),
+  );
+  return JSON.parse(new TextDecoder().decode(plaintext)) as T;
 }
 
 async function getCredentialKey(): Promise<CryptoKey> {
@@ -79,6 +107,10 @@ async function getCredentialKey(): Promise<CryptoKey> {
   const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
   await writeStoredKey(key);
   return key;
+}
+
+function canUseCredentialCrypto(): boolean {
+  return Boolean(globalThis.crypto?.subtle && globalThis.crypto.getRandomValues);
 }
 
 function openKeyDb(): Promise<IDBDatabase> {
