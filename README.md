@@ -12,21 +12,17 @@ The current prototype supports Paperless141-style portals:
 - Advantage Aviation
 - Aerodynamic Aviation
 
+![Plane Finder demo screenshot](docs/screenshots/plane-finder-demo.png)
+
 ## What It Does
 
-- Searches one or more portals in parallel.
-- Reuses an authenticated browser session for repeated searches.
-- Reads fleet status once per portal login/search flow.
-- Treats aircraft missing from fleet status as unavailable.
-- Parses the aircraft schedule and CFI columns from the same schedule page.
-- Optionally filters aircraft by model text, such as `172`.
-- Checks requested-time availability for aircraft and optionally a selected CFI.
-- Reads detailed squawks only for aircraft with enough schedule availability.
-- Marks aircraft unavailable for current 100-hour overdue, annual overdue, fleet
-  maintenance status, or grounding-alert squawks.
-- Estimates 100-hour risk at the requested start time using current tach data and
-  a simple daily usage estimate for time between now and the requested date.
-- Stores portal selection, search inputs, and credentials in browser storage.
+- Searches multiple supported portals in parallel for aircraft that match a
+  requested date, time window, and model filter.
+- Ranks aircraft by availability, CFI coverage, squawks, maintenance status, and
+  100-hour risk.
+- Stores portal selection, search inputs, and encrypted browser-local
+  credentials for faster repeat searches.
+- and more.
 
 ## Architecture
 
