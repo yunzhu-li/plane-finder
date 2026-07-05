@@ -83,6 +83,8 @@ export type Candidate = {
   score: number;
   viable: boolean;
   reasons: string[];
+  requestedStartTime: string;
+  requestedEndTime: string;
   requestedMinutes: number;
   availableMinutes: number;
   cfiAvailableMinutes: number | null;

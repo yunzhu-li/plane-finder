@@ -4,7 +4,7 @@ import { signal } from "@preact/signals";
 import { portals } from "./config";
 import { Paperless141Adapter } from "./adapters/paperless141/adapter";
 import { loadSearchPreferences, saveSearchPreferences } from "./lib/preferencesStorage";
-import { minutesFromTime } from "./lib/time";
+import { formatMinutes, inferSlotMinutes, minutesFromTime } from "./lib/time";
 import type { Candidate, SearchInput, StatusStep } from "./types";
 import "./styles.css";
 
@@ -135,7 +135,12 @@ function App() {
                     id={`${portal.id}-username`}
                     name={`${portal.id}-username`}
                     value={credentialsFor(input, portal.id).username}
-                    autocomplete="username"
+                    autocomplete="off"
+                    autocapitalize="none"
+                    autocorrect="off"
+                    spellcheck={false}
+                    data-1p-ignore="true"
+                    data-lpignore="true"
                     onInput={(event) => setInput(updateCredentials(input, portal.id, { username: event.currentTarget.value }))}
                   />
                 </label>
@@ -146,7 +151,9 @@ function App() {
                     name={`${portal.id}-password`}
                     type="password"
                     value={credentialsFor(input, portal.id).password}
-                    autocomplete="current-password"
+                    autocomplete="off"
+                    data-1p-ignore="true"
+                    data-lpignore="true"
                     onInput={(event) => setInput(updateCredentials(input, portal.id, { password: event.currentTarget.value }))}
                   />
                 </label>
@@ -339,7 +346,9 @@ function ResultGroup({ title, candidates, empty }: { title: string; candidates: 
               <Fact
                 label="Availability"
                 value={coverageValue(candidate.availableMinutes, candidate.requestedMinutes)}
+                detail={partialAvailabilityDetail(candidate)}
                 tone={candidate.availableMinutes >= candidate.requestedMinutes ? "good" : candidate.availableMinutes >= candidate.requestedMinutes / 2 ? "warn" : "bad"}
+                detailTone="neutral"
               />
               {candidate.cfiAvailableMinutes !== null && (
                 <Fact
@@ -442,6 +451,34 @@ function coverageValue(available: number, requested: number): string {
   return available >= requested ? "✓" : `${available}/${requested} min`;
 }
 
+function partialAvailabilityDetail(candidate: Candidate): string | undefined {
+  if (candidate.availableMinutes <= 0 || candidate.availableMinutes >= candidate.requestedMinutes) return undefined;
+  const requestStart = minutesFromTime(candidate.requestedStartTime);
+  const requestEnd = minutesFromTime(candidate.requestedEndTime);
+  const ranges = availableRanges(candidate.aircraft.cells)
+    .filter((range) => range.end > requestStart && range.start < requestEnd)
+    .map((range) => `${formatMinutes(range.start)}-${formatMinutes(range.end)}`);
+  return ranges.length > 0 ? `Available: ${ranges.join(", ")}` : undefined;
+}
+
+function availableRanges(cells: Candidate["aircraft"]["cells"]): { start: number; end: number }[] {
+  const slot = inferSlotMinutes(cells.map((cell) => cell.time));
+  const ranges: { start: number; end: number }[] = [];
+  const sorted = cells.slice().sort((a, b) => minutesFromTime(a.time) - minutesFromTime(b.time));
+  for (const cell of sorted) {
+    if (!cell.available) continue;
+    const start = minutesFromTime(cell.time);
+    const end = start + slot;
+    const current = ranges[ranges.length - 1];
+    if (current && start <= current.end) {
+      current.end = Math.max(current.end, end);
+    } else {
+      ranges.push({ start, end });
+    }
+  }
+  return ranges;
+}
+
 function riskTone(risk: Candidate["inspectionRisk"]): "good" | "warn" | "bad" | "neutral" {
   if (risk === "low") return "good";
   if (risk === "medium") return "warn";
@@ -483,8 +520,7 @@ function labelFor(id: string): string {
     session: "Opening portal session",
     login: "Logging in",
     fleet: "Loading fleet status",
-    schedule: "Loading aircraft schedule",
-    instructors: "Loading instructor schedule",
+    schedule: "Loading schedules",
     squawks: "Loading squawks",
     rank: "Ranking candidates",
   } as Record<string, string>)[id] || id;

@@ -40,15 +40,12 @@ export class Paperless141Adapter {
     const fleetStatus = parseFleetStatusPage(await this.get("/mstr13b.aspx"));
     this.done("fleet", `${fleetStatus.length} fleet status rows parsed`);
 
-    this.step("schedule", "Loading aircraft schedule", "Navigating to resource schedules");
+    this.step("schedule", "Loading schedules", "Reading aircraft and instructor availability");
     let scheduleHtml = await this.navigateFromHome(home, "ctl00$BtnSched", "Schedules");
     scheduleHtml = await this.setScheduleDateAndViewStart(scheduleHtml, input.desiredDate, "mstr7p.aspx");
     const aircraft = filterAircraftByModel(parseSchedulePage(scheduleHtml), input.aircraftModel);
-    this.done("schedule", `${aircraft.length} aircraft columns parsed`);
-
-    this.step("instructors", "Loading instructor schedule", "Parsing CFI columns from aircraft schedule");
     const cfis = parseCfiPage(scheduleHtml);
-    this.done("instructors", `${cfis.length} instructor columns parsed`);
+    this.done("schedule", `${aircraft.length} aircraft and ${cfis.length} instructor columns parsed`);
 
     const requested = requestedMinutes(input.startTime, input.endTime);
     const selectedCfi = selectCfi(cfis, input.cfiName);
@@ -357,6 +354,8 @@ function rankCandidates(
         score: Math.round(availabilityScore + cfiScore + inspectionBonus - squawkPenalty - inspectionPenalty - (status ? 0 : 100)),
         viable,
         reasons,
+        requestedStartTime: input.startTime,
+        requestedEndTime: input.endTime,
         requestedMinutes: requested,
         availableMinutes,
         cfiAvailableMinutes,
@@ -397,6 +396,8 @@ function buildCfiUnavailableCandidate(
     score: -1,
     viable: false,
     reasons: ["CFI unavailable"],
+    requestedStartTime: input.startTime,
+    requestedEndTime: input.endTime,
     requestedMinutes: requested,
     availableMinutes: 0,
     cfiAvailableMinutes,
