@@ -1,4 +1,4 @@
-import type { AircraftSchedule, CfiSchedule, FleetStatus, ScheduleCell, Squawk } from "../../types";
+import type { AircraftSchedule, FleetStatus, ScheduleCell, Squawk } from "../../types";
 
 export function parseHiddenFields(doc: Document): URLSearchParams {
   const params = new URLSearchParams();
@@ -31,30 +31,6 @@ export function parseSchedulePage(html: string): AircraftSchedule[] {
     cells: rows.slice(dataStart).map((row) => parseScheduleCell(row, colIndex + 1)).filter(Boolean) as ScheduleCell[],
   })).filter((item) => item.reg);
   return aircraft.length > 0 ? aircraft : parseSchedulePageFallback(html);
-}
-
-export function parseCfiPage(html: string): CfiSchedule[] {
-  if (typeof DOMParser === "undefined") return parseCfiPageFallback(html);
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  const table = findScheduleTable(doc);
-  if (!table) return parseCfiPageFallback(html);
-
-  const rows = [...table.querySelectorAll("tr")];
-  const firstTimeRow = firstTimeRowIndex(rows);
-  const headerRowIndex = findResourceHeaderRow(rows, firstTimeRow);
-  const dataStart = firstTimeRow >= 0 ? firstTimeRow : headerRowIndex + 1;
-  const headers = rowCells(rows[headerRowIndex]).slice(1);
-  const typeRow = rows[headerRowIndex + 1];
-  const typeCells = isTypeRow(typeRow) ? rowCells(typeRow).slice(1) : [];
-  const cfiStartRaw = typeCells.findIndex((type) => /CFI|MEI|FI/i.test(type));
-  if (typeCells.length > 0 && cfiStartRaw < 0) return [];
-  const cfiStart = Math.max(0, cfiStartRaw);
-
-  const cfis = headers.slice(cfiStart).map((name, index) => ({
-    name,
-    cells: rows.slice(dataStart).map((row) => parseScheduleCell(row, cfiStart + index + 1)).filter(Boolean) as ScheduleCell[],
-  })).filter((cfi) => cfi.name);
-  return cfis.length > 0 ? cfis : parseCfiPageFallback(html);
 }
 
 export function parseSquawksPage(html: string): Squawk[] {
@@ -143,16 +119,6 @@ function parseSchedulePageFallback(html: string): AircraftSchedule[] {
     type: parsed.typeCells[colIndex] || "Unknown",
     cells: parsed.rows.map((row) => rawScheduleCell(row, colIndex + 1)).filter(Boolean) as ScheduleCell[],
   })).filter((aircraft) => aircraft.reg);
-}
-
-function parseCfiPageFallback(html: string): CfiSchedule[] {
-  const parsed = parseRawScheduleGrid(html);
-  if (!parsed) return [];
-  const cfiStart = parsed.aircraftCount;
-  return parsed.headers.slice(cfiStart).map((name, index) => ({
-    name,
-    cells: parsed.rows.map((row) => rawScheduleCell(row, cfiStart + index + 1)).filter(Boolean) as ScheduleCell[],
-  })).filter((cfi) => cfi.name);
 }
 
 function parseRawScheduleGrid(html: string): { headers: string[]; typeCells: string[]; aircraftCount: number; rows: string[][] } | null {

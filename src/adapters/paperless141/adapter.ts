@@ -1,7 +1,6 @@
 import type {
   AircraftSchedule,
   Candidate,
-  CfiSchedule,
   FleetStatus,
   PortalConfig,
   SearchInput,
@@ -11,7 +10,6 @@ import type {
 import { overlapMinutes, requestedMinutes } from "../../lib/time";
 import {
   extractAircraftOptions,
-  parseCfiPage,
   parseFleetStatusPage,
   parseHiddenFields,
   parseSchedulePage,
@@ -30,7 +28,7 @@ const sessions = new Map<string, PortalSession>();
 export class Paperless141Adapter {
   constructor(private readonly portal: PortalConfig, private readonly emit: EmitStatus) {}
 
-  async find(input: SearchInput): Promise<{ candidates: Candidate[]; cfiSchedules: CfiSchedule[] }> {
+  async find(input: SearchInput): Promise<{ candidates: Candidate[] }> {
     const home = await this.openSession(input);
     if (!isHomePage(home)) {
       throw new Error("Login did not reach the Paperless141 home page.");
@@ -40,26 +38,13 @@ export class Paperless141Adapter {
     const fleetStatus = parseFleetStatusPage(await this.get("/mstr13b.aspx"));
     this.done("fleet", `${fleetStatus.length} fleet status rows parsed`);
 
-    this.step("schedule", "Loading schedules", "Reading aircraft and instructor availability");
+    this.step("schedule", "Loading aircraft schedule", "Reading aircraft availability");
     let scheduleHtml = await this.navigateFromHome(home, "ctl00$BtnSched", "Schedules");
     scheduleHtml = await this.setScheduleDateAndViewStart(scheduleHtml, input.desiredDate, "mstr7p.aspx");
     const aircraft = filterAircraftByModel(parseSchedulePage(scheduleHtml), input.aircraftModel);
-    const cfis = parseCfiPage(scheduleHtml);
-    this.done("schedule", `${aircraft.length} aircraft and ${cfis.length} instructor columns parsed`);
+    this.done("schedule", `${aircraft.length} aircraft columns parsed`);
 
     const requested = requestedMinutes(input.startTime, input.endTime);
-    const selectedCfi = selectCfi(cfis, input.cfiName);
-    const cfiAvailableMinutes = selectedCfi
-      ? overlapMinutes(selectedCfi.cells, input.startTime, input.endTime)
-      : null;
-
-    if (input.requireCfi && (cfiAvailableMinutes ?? 0) < requested) {
-      this.done("rank", "CFI unavailable; skipped aircraft checks");
-      return {
-        candidates: [buildCfiUnavailableCandidate(this.portal, input, requested, cfiAvailableMinutes)],
-        cfiSchedules: cfis,
-      };
-    }
 
     const detailedSquawkTargets = aircraft
       .filter((item) => {
@@ -72,10 +57,10 @@ export class Paperless141Adapter {
     const squawkHome = await this.navigateFromHome(home, "ctl00$BtnAmtSquawks", "Squawks");
     const squawks = await this.loadSquawksForAircraft(squawkHome, detailedSquawkTargets);
 
-    this.step("rank", "Ranking candidates", "Scoring availability, CFI overlap, and squawks");
-    const candidates = rankCandidates(this.portal, input, aircraft, cfis, squawks, fleetStatus, new Set(detailedSquawkTargets));
+    this.step("rank", "Ranking candidates", "Scoring availability and squawks");
+    const candidates = rankCandidates(this.portal, input, aircraft, squawks, fleetStatus, new Set(detailedSquawkTargets));
     this.done("rank", `${candidates.filter((candidate) => candidate.viable).length} available candidates found`);
-    return { candidates, cfiSchedules: cfis };
+    return { candidates };
   }
 
   private async openSession(input: SearchInput): Promise<string> {
@@ -309,13 +294,11 @@ function rankCandidates(
   portal: PortalConfig,
   input: SearchInput,
   aircraft: AircraftSchedule[],
-  cfis: CfiSchedule[],
   squawks: Squawk[],
   fleetStatus: FleetStatus[],
   detailedSquawkRegs: Set<string>,
 ): Candidate[] {
   const requested = requestedMinutes(input.startTime, input.endTime);
-  const selectedCfi = selectCfi(cfis, input.cfiName);
 
   return aircraft
     .map((item) => {
@@ -323,9 +306,6 @@ function rankCandidates(
       const squawkDetailsLoaded = detailedSquawkRegs.has(item.reg);
       const aircraftSquawks = squawks.filter((squawk) => squawk.aircraft === item.reg);
       const availableMinutes = overlapMinutes(item.cells, input.startTime, input.endTime);
-      const cfiAvailableMinutes = input.requireCfi && selectedCfi
-        ? overlapMinutes(selectedCfi.cells, input.startTime, input.endTime)
-        : null;
       const fleetSquawkCount = status?.squawkCount ?? 0;
       const squawkPenalty = aircraftSquawks.reduce((total, squawk) => {
         if (squawk.severity === "high") return total + 35;
@@ -333,7 +313,6 @@ function rankCandidates(
         return total + 5;
       }, Math.max(0, fleetSquawkCount - aircraftSquawks.length) * 5);
       const availabilityScore = requested > 0 ? (availableMinutes / requested) * 100 : 0;
-      const cfiScore = input.requireCfi ? (cfiAvailableMinutes ?? 0) / requested * 25 : 25;
       const estimatedHoursToHundredHour = estimateHoursToHundredAtStart(status, input.desiredDate);
       const annualOverdue = Boolean(status?.annualDue && isOverdueAt(status.annualDue, input.desiredDate));
       const hundredHourOverdue = Boolean(status?.hoursToHundredHour != null && status.hoursToHundredHour <= 0);
@@ -342,23 +321,22 @@ function rankCandidates(
       const inspectionPenalty = inspectionPenaltyFor(inspectionRisk, status, annualOverdue, estimatedHoursToHundredHour);
       const inspectionBonus = status?.hoursToHundredHour == null ? 0 : Math.min(20, Math.max(0, status.hoursToHundredHour / 5));
       const blockedByMaintenance = annualOverdue || hundredHourOverdue || groundingAlert;
-      const viable = Boolean(status) && !blockedByMaintenance && availableMinutes >= requested && (!input.requireCfi || (cfiAvailableMinutes ?? 0) >= requested);
+      const viable = Boolean(status) && !blockedByMaintenance && availableMinutes >= requested;
       const squawkSkipReason = squawkDetailsLoaded ? null : "Squawk details skipped because availability is below half of the requested window.";
-      const reasons = buildReasons(requested, availableMinutes, cfiAvailableMinutes, aircraftSquawks, inspectionRisk, input.requireCfi, status, squawkDetailsLoaded, annualOverdue);
-      const notes = buildNotes(requested, availableMinutes, cfiAvailableMinutes, input.requireCfi, status, annualOverdue, hundredHourOverdue, groundingAlert);
+      const reasons = buildReasons(requested, availableMinutes, aircraftSquawks, inspectionRisk, status, squawkDetailsLoaded, annualOverdue);
+      const notes = buildNotes(requested, availableMinutes, status, annualOverdue, hundredHourOverdue, groundingAlert);
 
       return {
         portalId: portal.id,
         portalLabel: portal.label,
         aircraft: item,
-        score: Math.round(availabilityScore + cfiScore + inspectionBonus - squawkPenalty - inspectionPenalty - (status ? 0 : 100)),
+        score: Math.round(availabilityScore + inspectionBonus - squawkPenalty - inspectionPenalty - (status ? 0 : 100)),
         viable,
         reasons,
         requestedStartTime: input.startTime,
         requestedEndTime: input.endTime,
         requestedMinutes: requested,
         availableMinutes,
-        cfiAvailableMinutes,
         squawks: aircraftSquawks,
         squawkDetailsLoaded,
         squawkSkipReason,
@@ -374,46 +352,6 @@ function rankCandidates(
     .sort((a, b) => Number(b.viable) - Number(a.viable) || b.score - a.score);
 }
 
-function selectCfi(cfis: CfiSchedule[], cfiName: string): CfiSchedule | undefined {
-  return cfis.find((cfi) => cfi.name.toLowerCase().includes(cfiName.toLowerCase()));
-}
-
-function buildCfiUnavailableCandidate(
-  portal: PortalConfig,
-  input: SearchInput,
-  requested: number,
-  cfiAvailableMinutes: number | null,
-): Candidate {
-  return {
-    portalId: portal.id,
-    portalLabel: portal.label,
-    aircraft: {
-      reg: "(CFI unavailable)",
-      type: input.cfiName.trim() || "Required CFI",
-      cells: [],
-    },
-    summary: "(CFI unavailable)",
-    score: -1,
-    viable: false,
-    reasons: ["CFI unavailable"],
-    requestedStartTime: input.startTime,
-    requestedEndTime: input.endTime,
-    requestedMinutes: requested,
-    availableMinutes: 0,
-    cfiAvailableMinutes,
-    squawks: [],
-    squawkDetailsLoaded: false,
-    squawkSkipReason: "Skipped because CFI is unavailable.",
-    groundingAlert: false,
-    inspectionRisk: "unknown",
-    annualOverdue: false,
-    hundredHourOverdue: false,
-    estimatedHoursToHundredHour: null,
-    fleetStatus: null,
-    notes: ["CFI unavailable"],
-  };
-}
-
 function filterAircraftByModel(aircraft: AircraftSchedule[], modelFilter: string): AircraftSchedule[] {
   const filter = modelFilter.trim().toLowerCase();
   if (!filter) return aircraft;
@@ -423,10 +361,8 @@ function filterAircraftByModel(aircraft: AircraftSchedule[], modelFilter: string
 function buildReasons(
   requested: number,
   available: number,
-  cfiAvailable: number | null,
   squawks: Squawk[],
   inspectionRisk: Candidate["inspectionRisk"],
-  requireCfi: boolean,
   fleetStatus: FleetStatus | null,
   squawkDetailsLoaded: boolean,
   annualOverdue: boolean,
@@ -434,11 +370,6 @@ function buildReasons(
   const reasons: string[] = [];
   if (available < requested) reasons.push(`Aircraft available for ${available}/${requested} min`);
   else reasons.push("Aircraft covers requested time");
-  if (requireCfi) {
-    if (cfiAvailable === null) reasons.push("Selected CFI was not found");
-    else if (cfiAvailable < requested) reasons.push(`CFI available for ${cfiAvailable}/${requested} min`);
-    else reasons.push("CFI covers requested time");
-  }
   if (!squawkDetailsLoaded) reasons.push("Squawk detail skipped; below half requested availability");
   else if (squawks.length) reasons.push(`${squawks.length} squawk-like item(s)`);
   else reasons.push("No parsed squawk items");
@@ -449,8 +380,6 @@ function buildReasons(
 function buildNotes(
   requested: number,
   available: number,
-  cfiAvailable: number | null,
-  requireCfi: boolean,
   status: FleetStatus | null,
   annualOverdue: boolean,
   hundredHourOverdue: boolean,
@@ -459,7 +388,6 @@ function buildNotes(
   const notes: string[] = [];
   if (!status) notes.push("Not listed in fleet status page");
   if (available < requested) notes.push("Does not cover requested time");
-  if (requireCfi && (cfiAvailable ?? 0) < requested) notes.push("CFI does not cover requested time");
   if (hundredHourOverdue) notes.push("100hr overdue");
   else if (status?.hoursToHundredHour != null && status.hoursToHundredHour <= requested / 60) notes.push("100hr due during requested booking");
   else if (status?.hoursToHundredHour != null && status.hoursToHundredHour <= 10) notes.push("100hr due soon");

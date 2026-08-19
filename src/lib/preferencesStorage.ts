@@ -9,7 +9,7 @@ const OLD_SECURE_STORAGE_KEY = "plane-finder:search-input:v1";
 
 export type SearchPreferences = Pick<
   SearchInput,
-  "portalIds" | "desiredDate" | "startTime" | "endTime" | "aircraftModel" | "cfiName" | "requireCfi"
+  "portalIds" | "desiredDate" | "startTime" | "endTime" | "aircraftModel"
 >;
 
 export async function saveSearchPreferences(input: SearchInput): Promise<void> {
@@ -19,8 +19,6 @@ export async function saveSearchPreferences(input: SearchInput): Promise<void> {
     startTime: input.startTime,
     endTime: input.endTime,
     aircraftModel: input.aircraftModel,
-    cfiName: input.cfiName,
-    requireCfi: input.requireCfi,
   };
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));

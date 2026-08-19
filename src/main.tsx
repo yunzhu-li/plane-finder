@@ -12,6 +12,7 @@ const statusSteps = signal<StatusStep[]>([]);
 
 const today = new Date().toISOString().slice(0, 10);
 const timeStepSeconds = 30 * 60;
+const defaultDurationMinutes = 3 * 60;
 
 function App() {
   const [input, setInput] = useState<SearchInput>({
@@ -21,8 +22,6 @@ function App() {
     startTime: "09:00",
     endTime: "11:00",
     aircraftModel: "",
-    cfiName: "",
-    requireCfi: false,
   });
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [error, setError] = useState("");
@@ -36,7 +35,11 @@ function App() {
   useEffect(() => {
     void loadSearchPreferences()
       .then((saved) => {
-        if (saved) setInput((current) => ({ ...current, ...saved, credentials: { ...current.credentials, ...saved.credentials } }));
+        if (saved) setInput((current) => ({
+          ...current,
+          ...freshenStaleTimeRange(saved),
+          credentials: { ...current.credentials, ...saved.credentials },
+        }));
       })
       .catch(() => {
         updateStatus({ id: "storage", level: "error", label: "Saved preferences unavailable" });
@@ -191,19 +194,9 @@ function App() {
           </div>
           {timeRangeError && <p class="error">{timeRangeError}</p>}
 
-          <label class="toggle">
-            <input type="checkbox" checked={input.requireCfi} onInput={(event) => setInput({ ...input, requireCfi: event.currentTarget.checked })} />
-            <span>Require CFI availability</span>
-          </label>
-
           <label>
             Aircraft model contains
             <input value={input.aircraftModel} placeholder="Optional, e.g. 172" onInput={(event) => setInput({ ...input, aircraftModel: event.currentTarget.value })} />
-          </label>
-
-          <label>
-            CFI name contains
-            <input value={input.cfiName} placeholder="Optional, e.g. Li" onInput={(event) => setInput({ ...input, cfiName: event.currentTarget.value })} />
           </label>
 
           <button disabled={running || !canSearch(input)}>{running ? "Searching..." : "Find aircraft"}</button>
@@ -247,6 +240,57 @@ function updateCredentials(input: SearchInput, portalId: string, next: Partial<{
 
 function hasPortalError(portalId: string): boolean {
   return statusSteps.value.some((step) => step.portalId === portalId && step.level === "error");
+}
+
+function freshenStaleTimeRange(input: Pick<SearchInput, "desiredDate" | "startTime" | "endTime">): Pick<SearchInput, "desiredDate" | "startTime" | "endTime"> {
+  if (!isBeforeCurrentTime(input.desiredDate, input.startTime)) return input;
+
+  const now = new Date();
+  const start = roundUpToThirtyMinutes(now.getHours() * 60 + now.getMinutes());
+  if (start + defaultDurationMinutes < 24 * 60) {
+    return {
+      desiredDate: localDateString(now),
+      startTime: formatMinutes(start),
+      endTime: formatMinutes(start + defaultDurationMinutes),
+    };
+  }
+
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return {
+    desiredDate: localDateString(tomorrow),
+    startTime: "00:00",
+    endTime: formatMinutes(defaultDurationMinutes),
+  };
+}
+
+function isBeforeCurrentTime(date: string, endTime: string): boolean {
+  const parsed = parseLocalDateTime(date, endTime);
+  return Boolean(parsed && parsed.getTime() < Date.now());
+}
+
+function parseLocalDateTime(date: string, time: string): Date | null {
+  const dateMatch = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const timeMatch = time.match(/^(\d{2}):(\d{2})$/);
+  if (!dateMatch || !timeMatch) return null;
+  return new Date(
+    Number(dateMatch[1]),
+    Number(dateMatch[2]) - 1,
+    Number(dateMatch[3]),
+    Number(timeMatch[1]),
+    Number(timeMatch[2]),
+  );
+}
+
+function localDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function roundUpToThirtyMinutes(minutes: number): number {
+  return Math.ceil(minutes / 30) * 30;
 }
 
 function canSearch(input: SearchInput): boolean {
@@ -350,13 +394,6 @@ function ResultGroup({ title, candidates, empty }: { title: string; candidates: 
                 tone={candidate.availableMinutes >= candidate.requestedMinutes ? "good" : candidate.availableMinutes >= candidate.requestedMinutes / 2 ? "warn" : "bad"}
                 detailTone="neutral"
               />
-              {candidate.cfiAvailableMinutes !== null && (
-                <Fact
-                  label="CFI"
-                  value={coverageValue(candidate.cfiAvailableMinutes, candidate.requestedMinutes)}
-                  tone={candidate.cfiAvailableMinutes >= candidate.requestedMinutes ? "good" : "bad"}
-                />
-              )}
               <SquawkFact candidate={candidate} />
               <Fact
                 label="Maintenance risk"

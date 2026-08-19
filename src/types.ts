@@ -17,8 +17,6 @@ export type SearchInput = {
   startTime: string;
   endTime: string;
   aircraftModel: string;
-  cfiName: string;
-  requireCfi: boolean;
 };
 
 export type StatusLevel = "pending" | "active" | "done" | "error";
@@ -45,11 +43,6 @@ export type ScheduleCell = {
   title: string;
   rawText: string;
   background: string;
-};
-
-export type CfiSchedule = {
-  name: string;
-  cells: ScheduleCell[];
 };
 
 export type Squawk = {
@@ -87,7 +80,6 @@ export type Candidate = {
   requestedEndTime: string;
   requestedMinutes: number;
   availableMinutes: number;
-  cfiAvailableMinutes: number | null;
   squawks: Squawk[];
   squawkDetailsLoaded: boolean;
   squawkSkipReason: string | null;
